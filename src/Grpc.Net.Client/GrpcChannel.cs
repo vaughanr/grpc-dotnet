@@ -39,7 +39,6 @@ namespace Grpc.Net.Client
         internal const int DefaultMaxReceiveMessageSize = 1024 * 1024 * 4; // 4 MB
 
         private readonly ConcurrentDictionary<IMethod, GrpcMethodInfo> _methodInfoCache;
-        private readonly Func<IMethod, GrpcMethodInfo> _createMethodInfoFunc;
 
         internal Uri Address { get; }
         internal HttpClient HttpClient { get; }
@@ -76,7 +75,6 @@ namespace Grpc.Net.Client
             MessageAcceptEncoding = GrpcProtocolHelpers.GetMessageAcceptEncoding(CompressionProviders);
             LoggerFactory = channelOptions.LoggerFactory ?? NullLoggerFactory.Instance;
             ThrowOperationCanceledOnCancellation = channelOptions.ThrowOperationCanceledOnCancellation;
-            _createMethodInfoFunc = CreateMethodInfo;
 
             if (channelOptions.Credentials != null)
             {
@@ -109,15 +107,14 @@ namespace Grpc.Net.Client
 
         internal GrpcMethodInfo GetCachedGrpcMethodInfo(IMethod method)
         {
-            return _methodInfoCache.GetOrAdd(method, _createMethodInfoFunc);
-        }
+            GrpcMethodInfo CreateMethodInfo(IMethod method)
+            {
+                var uri = new Uri(method.FullName, UriKind.Relative);
+                var scope = new GrpcCallScope(method.Type, uri);
 
-        private GrpcMethodInfo CreateMethodInfo(IMethod method)
-        {
-            var uri = new Uri(method.FullName, UriKind.Relative);
-            var scope = new GrpcCallScope(method.Type, uri);
-
-            return new GrpcMethodInfo(scope, new Uri(Address, uri));
+                return new GrpcMethodInfo(scope, new Uri(Address, uri));
+            }
+            return _methodInfoCache.GetOrAdd(method, CreateMethodInfo);
         }
 
         private static Dictionary<string, ICompressionProvider> ResolveCompressionProviders(IList<ICompressionProvider>? compressionProviders)
